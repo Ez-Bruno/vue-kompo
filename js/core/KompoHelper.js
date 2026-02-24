@@ -1526,11 +1526,18 @@ class KompoStoreHelper {
             Vue.set(this._store, ns, {})
         }
         const store = this._store
+        const vue = this._vue
         return {
             set: (key, value) => { Vue.set(store[ns], key, value); return this },
             get: (key, def = null) => store[ns][key] !== undefined ? store[ns][key] : def,
             has: (key) => store[ns][key] !== undefined,
             all: () => ({ ...store[ns] }),
+            watch: (key, callback) => {
+                return vue.$watch(
+                    () => store[ns] && store[ns][key],
+                    (newVal, oldVal) => callback(newVal, oldVal)
+                )
+            },
         }
     }
 }
