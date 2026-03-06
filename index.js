@@ -265,6 +265,9 @@ const Kompo = {
 
 	}
 }
+Kompo.registerJsFeature = registerJsFeature
+Kompo.registerRunContextHelper = registerRunContextHelper
+
 export default Kompo;
 
 Vue.use(Kompo)

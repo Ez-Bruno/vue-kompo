@@ -1,5 +1,17 @@
 import { KompoHelper } from '../../core/KompoHelper'
 
+// --- Extension Registry ---
+const _jsFeatureRegistry = {}
+
+/**
+ * Register a custom JS feature handler.
+ * @param {string} configKey - The config key to look for
+ * @param {function} initHandler - Called with (config) when configKey exists. `this` = Vue instance.
+ */
+export function registerJsFeature(configKey, initHandler) {
+    _jsFeatureRegistry[configKey] = initHandler
+}
+
 /**
  * Mixin for declarative JS features: jsConditional, jsComputed, jsFilter
  * These allow PHP to define reactive behaviors without custom JS code
@@ -44,6 +56,17 @@ export default {
             if (this.$_jsFilter) {
                 this.$_initJsFilter()
             }
+            if (this.$_jsClassConditional) {
+                this.$_initJsClassConditional()
+            }
+
+            // Registered external features
+            Object.entries(_jsFeatureRegistry).forEach(([configKey, handler]) => {
+                const config = this.$_config(configKey)
+                if (config) {
+                    handler.call(this, config)
+                }
+            })
         },
 
         /**

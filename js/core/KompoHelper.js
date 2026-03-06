@@ -2,6 +2,19 @@
  * KompoHelper ($k) - A fluent API for interacting with Kompo components
  * Makes ->run() feel like being inside a Vue component
  */
+
+// --- Context Extension Registry ---
+const _contextExtensions = {}
+
+/**
+ * Register a custom helper for the run() context.
+ * @param {string} name - The destructurable name (e.g., 'myHelper')
+ * @param {function} factory - Called with (vueInstance, response, ctx) => returns the helper
+ */
+function registerRunContextHelper(name, factory) {
+    _contextExtensions[name] = factory
+}
+
 export default class KompoHelper {
     constructor(vueInstance, kompoInstance) {
         this.vue = vueInstance
@@ -1656,6 +1669,11 @@ function buildJsCtx(vueInstance, response = {}) {
         setValue: (field, value) => $k.field(field).set(value),
     }
 
+    // Apply registered context extensions
+    Object.entries(_contextExtensions).forEach(([name, factory]) => {
+        ctx[name] = factory(vueInstance, response, ctx)
+    })
+
     return ctx
 }
 
@@ -1669,5 +1687,6 @@ export {
     KompoHttpRequest,
     KompoDataHelper,
     KompoStoreHelper,
-    buildJsCtx
+    buildJsCtx,
+    registerRunContextHelper
 }
