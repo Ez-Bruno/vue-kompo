@@ -1,5 +1,3 @@
-import { KompoHelper } from '../../core/KompoHelper'
-
 /**
  * Mixin for declarative JS features: jsConditional, jsComputed, jsFilter
  * These allow PHP to define reactive behaviors without custom JS code
