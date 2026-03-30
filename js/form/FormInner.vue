@@ -57,6 +57,12 @@ export default {
     },
 
     methods: {
+        $_attributes(component) {
+            return {
+                ...this.$_defaultLayoutAttributes(component),
+                kompoid: this.$_elKompoId,
+            }
+        },
         preSubmit(){
             if(this.emitFormData)
                 this.$emit('submit', this.jsonFormData)
