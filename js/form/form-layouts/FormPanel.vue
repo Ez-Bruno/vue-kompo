@@ -198,6 +198,8 @@ export default {
                         if (w) this.$el.style.width = w + 'px'
                         this.$el.style.overflow = 'hidden'
                         this.$el.style.borderRadius = '0.5rem'
+                        this.$el.style['--lazy-h'] = h + 'px'
+                        this.$el.style['--lazy-w'] = w + 'px'
                     }
                 }
             } catch(e) {}
