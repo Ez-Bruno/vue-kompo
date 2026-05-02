@@ -1,4 +1,5 @@
 import Alert from './Alert'
+import KompoAxiosCtor from './KompoAxios'
 import { buildJsCtx } from './KompoHelper'
 
 /**
@@ -11,7 +12,7 @@ export default class KompoResponseHandler {
      * @param {Object} responseData - The response data containing kompoResponseType
      * @param {Object} vueInstance - The Vue component instance
      */
-    static handle(responseData, vueInstance) {
+    static handle(responseData, vueInstance, actionContext = null) {
         const { kompoResponseType, content, options = {} } = responseData
 
         switch (kompoResponseType) {
@@ -76,24 +77,92 @@ export default class KompoResponseHandler {
                 }).emitFrom(vueInstance)
                 break
                 
-            case 'refresh':
+            case 'refresh': {
+                // Mirrors KomponentActions::refresh() (refreshKomponentAction in Action.js):
+                // collect each target's kompoInfo via the event bus, batch them in a single
+                // $_refreshMany POST, then dispatch vlRefreshKomponent per kompoid so each
+                // target replaces its state. Works even when the target has no submitUrl
+                // (e.g. top-level Page Forms), unlike vlReloadAfterChildAction.
                 const kompoids = responseData.kompoids
                 const refreshData = responseData.data
 
-                if (kompoids) {
-                    // Target specific component(s)
-                    const ids = Array.isArray(kompoids) ? kompoids : [kompoids]
-                    ids.forEach(kompoid => {
-                        vueInstance.$kompo.vlReloadAfterChildAction(kompoid, refreshData)
-                    })
-                } else {
-                    // Self-refresh: trigger refresh on the component that made the request
-                    const selfKompoid = vueInstance.kompoid || vueInstance.$_elKompoId
-                    if (selfKompoid) {
-                        vueInstance.$kompo.vlReloadAfterChildAction(selfKompoid, refreshData)
-                    }
+                const ids = kompoids
+                    ? (Array.isArray(kompoids) ? kompoids : [kompoids])
+                    : (() => {
+                        const self = vueInstance.kompoid || vueInstance.$_elKompoId
+                        return self ? [self] : []
+                    })()
+
+                if (!ids.length) {
+                    break
                 }
+
+                if (!vueInstance.parentKomponentInfo) {
+                    vueInstance.parentKomponentInfo = {}
+                }
+
+                const askerId = vueInstance.$_elKompoId
+                const specifications = []
+
+                ids.forEach(kompoid => {
+                    // Synchronous round-trip on the global event bus: the target's
+                    // vlRequestKomponentInfo listener fires, synchronously emits
+                    // vlDeliverKomponentInfo+askerId, populating parentKomponentInfo[kompoid].
+                    vueInstance.$kompo.vlRequestKomponentInfo(kompoid, askerId, {
+                        resetFilters: true,
+                    })
+
+                    const info = vueInstance.parentKomponentInfo[kompoid]
+                    if (!info) {
+                        return
+                    }
+
+                    specifications.push({
+                        kompoid: kompoid,
+                        data: Object.assign({}, info.data || {}, refreshData || {}),
+                        kompoinfo: info.kompoinfo,
+                        page: info.page,
+                        sort: info.sort,
+                    })
+                })
+
+                if (!specifications.length) {
+                    break
+                }
+
+                // Resolve the kompo route from any available source. The action that just
+                // received this response was POSTed there, but for action types without a
+                // 'route' config (e.g. submit-form), fall back to the vue's kompoRoute config
+                // or hop through any live Komponent that exposes it.
+                const route =
+                    (actionContext && actionContext.$_kAxios && (actionContext.$_kAxios.$_route || actionContext.$_kAxios.$_kompoRoute)) ||
+                    (actionContext && actionContext.$_config && (actionContext.$_config('route') || actionContext.$_config('kompoRoute'))) ||
+                    (vueInstance.$_kAxios && (vueInstance.$_kAxios.$_route || vueInstance.$_kAxios.$_kompoRoute)) ||
+                    (vueInstance.$_config && (vueInstance.$_config('kompoRoute') || vueInstance.$_config('route'))) ||
+                    null
+
+                if (!route) {
+                    console.warn('Kompo: refresh response skipped, no kompo route available', {
+                        askerId,
+                        hasActionContext: !!actionContext,
+                        actionConfigRoute: actionContext && actionContext.actionConfig && actionContext.actionConfig.route,
+                        actionKAxiosRoute: actionContext && actionContext.$_kAxios && actionContext.$_kAxios.$_route,
+                        actionKAxiosKompoRoute: actionContext && actionContext.$_kAxios && actionContext.$_kAxios.$_kompoRoute,
+                        vueConfigKompoRoute: vueInstance.$_config && vueInstance.$_config('kompoRoute'),
+                        vueConfigRoute: vueInstance.$_config && vueInstance.$_config('route'),
+                    })
+                    break
+                }
+
+                const kAxios = (actionContext && actionContext.$_kAxios) || vueInstance.$_kAxios || new KompoAxiosCtor(vueInstance)
+
+                kAxios.$_refreshMany(route, specifications).then(r => {
+                    Object.keys(r.data).forEach(kompoid => {
+                        vueInstance.$kompo.vlRefreshKomponent(kompoid, r.data[kompoid])
+                    })
+                })
                 break
+            }
 
             case 'updateElements':
                 const targetKompoid = responseData.kompoid || vueInstance.kompoid || vueInstance.$_elKompoId
@@ -189,7 +258,7 @@ export default class KompoResponseHandler {
                 // Execute multiple response actions sequentially
                 const actions = responseData.actions || []
                 actions.forEach(action => {
-                    KompoResponseHandler.handle(action, vueInstance)
+                    KompoResponseHandler.handle(action, vueInstance, actionContext)
                 })
                 break
 

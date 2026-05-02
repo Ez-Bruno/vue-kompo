@@ -470,7 +470,7 @@ export default class Action {
     handleDynamicResponse(response) {
         if (response.data && response.data.kompoResponseType) {
             // Use the global response handler
-            KompoResponseHandler.handle(response.data, this.vue)
+            KompoResponseHandler.handle(response.data, this.vue, this)
             return true
         }
 
