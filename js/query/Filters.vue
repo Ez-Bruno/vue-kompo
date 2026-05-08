@@ -1,7 +1,8 @@
 <template>
     <div v-if="filters.length" :class="'vlFilters'+placement">
-        <template v-for="filter in filters">
+        <template v-for="(filter, index) in filters">
             <component
+                :key="filter.id || filter._kid || '__idx-' + index"
                 :is="$_vueTag(filter)"
                 :vkompo="filter"
                 :kompoid="kompoid"

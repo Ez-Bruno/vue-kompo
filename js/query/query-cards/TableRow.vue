@@ -2,9 +2,9 @@
     <tr 
         v-bind="$_cardWrapperAttributes"
         @click="$_clickAction">
-        <template v-for="(component,k) in $_props">
-            <td :key="k" v-if="$_vueTag(component)" :class="tdClass(component)">
-                <component 
+        <template v-for="(component, index) in $_props">
+            <td :key="component.id || component._kid || '__idx-' + index" v-if="$_vueTag(component)" :class="tdClass(component)">
+                <component
                 	v-bind="componentAttributes(component)"
                     @activate="activate" />
             </td>

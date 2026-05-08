@@ -1,8 +1,8 @@
 <template>
     <div v-bind="$_layoutWrapperAttributes" v-show="!$_hidden">
 
-        <component v-for="(col,index) in elements" 
-            :key="index"
+        <component v-for="(col,index) in elements"
+            :key="col.id || col._kid || '__idx-' + index"
             v-bind="$_attributes(col)" />
             
     </div>

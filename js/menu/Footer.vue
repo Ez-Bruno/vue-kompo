@@ -1,7 +1,9 @@
 <template>
     <footer v-bind="$_menuAttributes">
-        <template v-for="component in elements">
-            <component v-bind="$_attributes(component)"/>
+        <template v-for="(component, index) in elements">
+            <component
+                :key="component.id || component._kid || '__idx-' + index"
+                v-bind="$_attributes(component)"/>
         </template>
     </footer>
 </template>

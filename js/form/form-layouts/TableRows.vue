@@ -4,9 +4,10 @@
     	v-show="!$_hidden"
         @click="$_clickAction">
         <td v-for="(row,index) in elements"
+            :key="row.id || row._kid || '__idx-' + index"
             :class="tdClass(row)">
-            <component 
-                v-bind="$_attributes(row)" 
+            <component
+                v-bind="$_attributes(row)"
                 @deleted="$emit('deleted')"/>
         </td>
     </tr>

@@ -19,11 +19,11 @@
 
             <div class="vlDropdownMenu"
                 :class="menuClass" >
-                <component 
+                <component
                     v-for="(col,index) in elements"
-                    :key="index"
+                    :key="col.id || col._kid || '__idx-' + index"
                     v-on="{ ...col.on, click: () => $emit('click', col)}"
-                    v-bind="$_defaultLayoutAttributes(col)" 
+                    v-bind="$_defaultLayoutAttributes(col)"
                 />
         
             </div>

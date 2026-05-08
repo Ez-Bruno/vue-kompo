@@ -10,13 +10,13 @@
             tag="div"
             class="vlMenuElements">
             <component
-                v-for="component in elements"
-                :key="component.id"
+                v-for="(component, index) in elements"
+                :key="component.id || component._kid || '__idx-' + index"
                 v-bind="$_attributes(component)"
             />
         </transition-group>
-        <template v-else v-for="component in elements">
-            <component :key="component.id" v-bind="$_attributes(component)"/>
+        <template v-else v-for="(component, index) in elements">
+            <component :key="component.id || component._kid || '__idx-' + index" v-bind="$_attributes(component)"/>
         </template>
 
     </aside>

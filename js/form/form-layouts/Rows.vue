@@ -5,7 +5,8 @@
         @click="$_clickAction"
         v-turbo-click="component.turbo">
         <template v-for="(row,index) in elements">
-            <component 
+            <component
+                :key="row.id || row._kid || '__idx-' + index"
                 v-bind="$_attributes(row)"
                 @touchedForm="touchedForm" />
         </template>

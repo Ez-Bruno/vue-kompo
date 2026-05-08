@@ -1,7 +1,10 @@
 <template>
     <component v-bind="formAttributes">
-        <template v-for="component in elements">
-            <component v-bind="$_attributes(component)"/>
+        <template v-for="(component, index) in elements">
+            <component
+                :key="component.id || component._kid || '__idx-' + index"
+                v-bind="$_attributes(component)"
+            />
         </template>
     </component>
 </template>
@@ -13,6 +16,7 @@ import IsKomponent from '../mixins/IsKomponent'
 import DoesAxiosRequests from '../form/mixins/DoesAxiosRequests'
 import TurboClick from '../core/TurboClick'
 import KompoResponseHandler from '../core/KompoResponseHandler'
+import { replaceElementById } from './helpers/replaceElementById'
 
 export default {
     mixins: [Layout, IsKomponent, DoesAxiosRequests],
@@ -240,16 +244,13 @@ export default {
             ])
         },
         $_updateElementsById(updates, transition) {
+            const setter = (arr, i, v) => this.$set(arr, i, v)
             Object.keys(updates).forEach(id => {
-                const index = this.elements.findIndex(el => el.id === id)
-                if (index !== -1) {
-                    // Apply transition config to element if provided
-                    const element = updates[id]
-                    if (transition && element.config) {
-                        element.config.transition = transition
-                    }
-                    this.$set(this.elements, index, element)
+                const newElement = updates[id]
+                if (transition && newElement.config) {
+                    newElement.config.transition = transition
                 }
+                replaceElementById(this.elements, id, newElement, setter)
             })
         }
 

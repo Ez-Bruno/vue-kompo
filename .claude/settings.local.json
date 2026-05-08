@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(xargs grep:*)",
+      "Bash(grep -r '$_focusAction\\\\|focus\\\\|blur' /c/Users/jkend/Documents/Projects/kompo/vue-kompo/js/element/mixins/ '--include=*.js')",
+      "Bash(grep -n '$watch\\\\|watchField\\\\|addEventListener' /c/Users/jkend/Documents/Projects/kompo/vue-kompo/js/element/mixins/HasJsFeatures.js)",
+      "Bash(grep:*)",
+      "Bash(find:*)",
+      "Bash(cp \"C:/Users/jkend/Documents/Projects/kompo/vue-kompo/js/core/KompoResponseHandler.js\" \"C:/Users/jkend/Documents/Projects/kompo/SISC/node_modules/vue-kompo/js/core/KompoResponseHandler.js\")",
+      "Bash(cp \"C:/Users/jkend/Documents/Projects/kompo/vue-kompo/js/form/FormInner.vue\" \"C:/Users/jkend/Documents/Projects/kompo/SISC/node_modules/vue-kompo/js/form/FormInner.vue\")",
+      "Bash(cp \"C:/Users/jkend/Documents/Projects/kompo/vue-kompo/js/menu/mixins/IsMenu.js\" \"C:/Users/jkend/Documents/Projects/kompo/SISC/node_modules/vue-kompo/js/menu/mixins/IsMenu.js\")",
+      "Bash(cp \"C:/Users/jkend/Documents/Projects/kompo/vue-kompo/js/query/Query.vue\" \"C:/Users/jkend/Documents/Projects/kompo/SISC/node_modules/vue-kompo/js/query/Query.vue\")",
+      "Bash(mkdir -p \"C:/Users/jkend/Documents/Projects/kompo/SISC/node_modules/vue-kompo/js/form/helpers\")",
+      "Bash(cp \"C:/Users/jkend/Documents/Projects/kompo/vue-kompo/js/form/helpers/replaceElementById.js\" \"C:/Users/jkend/Documents/Projects/kompo/SISC/node_modules/vue-kompo/js/form/helpers/replaceElementById.js\")"
+    ]
+  }
+}

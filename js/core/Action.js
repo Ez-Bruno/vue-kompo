@@ -2,7 +2,7 @@ import KompoAxios from './KompoAxios'
 import Alert from './Alert'
 import TurboClick from './TurboClick'
 import KompoResponseHandler from './KompoResponseHandler'
-import { buildJsCtx, KompoHelper } from './KompoHelper'
+import { buildJsCtx, KompoHelper, applyLoadingPanel } from './KompoHelper'
 
 export default class Action {
 	constructor(action, vue){
@@ -59,9 +59,29 @@ export default class Action {
         let additionalPayload = this.getParentKomponentFormData()
         let checkedItemIds = this.vue.$_config('withCheckedItemIds') ? this.getParentKomponentInfo().data : null
 
+        // PHP-driven `->withLoadingIn($panelId)` writes `loadingPanel` onto
+        // the action's config blob. Toggle the .vlPanelLoading class around
+        // the axios call so the panel shows a loading state while the
+        // request is in flight. Cleared in both .then() and .catch() to
+        // match the existing dual-handler pattern in this file.
+        const panelId = this.$_config('loadingPanel')
+        applyLoadingPanel(panelId, true)
+
+        // PHP-driven `->optimistic()` writes `optimistic: true`. When set,
+        // run the 'success' chained interactions BEFORE the AJAX fires so
+        // the user sees instant UI feedback. Rollback is the user's
+        // responsibility via `->onError` — automatic inversion isn't
+        // possible because most "js*" helpers emit `run` actions with
+        // arbitrary JS code blobs.
+        const optimistic = !!this.$_config('optimistic')
+        if (optimistic) {
+            this.vue.$_runInteractionsOfType(this, 'success', null)
+        }
+
         this.$_kAxios.$_actionAxiosRequest(payload, Object.assign(additionalPayload || {}, checkedItemIds || {}))
         .then(r => {
 
+            applyLoadingPanel(panelId, false)
 			this.vue.$_state({ loading: false })
             this.vue.$kompo.vlToggleSubmit(this.vue.kompoid, true)
 
@@ -70,11 +90,14 @@ export default class Action {
                 return
             }
 
-            this.vue.$_runInteractionsOfType(this, 'success', r)
+            if (!optimistic) {
+                this.vue.$_runInteractionsOfType(this, 'success', r)
+            }
 
 
         }).catch(e => {
 
+            applyLoadingPanel(panelId, false)
             this.vue.$_state({ loading: false })
 
             this.handleErrorInteraction(e)

@@ -5,7 +5,7 @@
         @click="$_clickAction"
         v-turbo-click="component.turbo">
         <component v-for="(col,index) in elements"
-            :key="index"
+            :key="col.id || col._kid || '__idx-' + index"
             v-bind="$_attributes(col)"
         />
     </component>

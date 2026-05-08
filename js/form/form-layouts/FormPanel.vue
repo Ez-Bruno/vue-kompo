@@ -10,7 +10,7 @@
             <div :key="contentKey" :class="$_contentAnimClass" :style="$_contentAnimStyle">
                 <div v-if="html" :is="{template: html}" />
                 <component
-                    v-for="(row,index) in elements" :key="componentKey(index)"
+                    v-for="(row,index) in elements" :key="row.id || row._kid || componentKey(index)"
                     v-bind="$_attributes(row)"
                     @closeModal="closeModal"
                     @closePanel="reset"

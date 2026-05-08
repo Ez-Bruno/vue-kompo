@@ -2,8 +2,8 @@
     <thead>
         <tr>
             <template v-for="(th, i) in headers">
-                <th v-if="isString(th)" v-html="th" />
-                <component v-else v-bind="$_thAttributes(th, i)" />
+                <th v-if="isString(th)" :key="'__idx-' + i" v-html="th" />
+                <component v-else :key="th.id || th._kid || '__idx-' + i" v-bind="$_thAttributes(th, i)" />
             </template>
         </tr>
     </thead>

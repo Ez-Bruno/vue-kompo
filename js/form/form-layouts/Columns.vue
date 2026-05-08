@@ -4,9 +4,9 @@
     	v-show="!$_hidden"
         @click="$_clickAction">
         <div v-for="(col,index) in elements"
-            :key="index"
+            :key="col.id || col._kid || '__idx-' + index"
             :class="colClasses(col)">
-            <component 
+            <component
                 v-bind="$_attributes(col)" />
         </div>
     </div>

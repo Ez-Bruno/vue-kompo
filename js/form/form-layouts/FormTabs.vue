@@ -5,10 +5,10 @@
         <ul role="tablist" class="flex">
             <li
                 v-for="(element, index) in elements"
-                :key="index"
+                :key="(element.id || element._kid || '__idx-' + index) + '-label'"
                 role="presentation"
             >
-                <vl-form-tab-label 
+                <vl-form-tab-label
                     :activeTab="tabActive(index)"
                     :selectedClass="$_selectedClass"
                     :unselectedClass="$_unselectedClass"
@@ -19,9 +19,9 @@
             </li>
         </ul>
         <div class="vlTabContent">
-            <component 
-                v-for="(tab,index) in elements" 
-                :key="index"
+            <component
+                v-for="(tab,index) in elements"
+                :key="tab.id || tab._kid || '__idx-' + index"
                 :activeTab="tabActive(index)"
                 v-bind="$_attributes(tab)"/>
         </div>

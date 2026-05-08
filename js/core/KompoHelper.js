@@ -1069,6 +1069,97 @@ class KompoModalHelper {
 // HTTP REQUEST HELPER CLASS
 // ==========================================
 
+/**
+ * Toggle the .vlPanelLoading CSS class on a panel by id.
+ * Mirrors the Trigger::panelLoading PHP macro semantics. Direct DOM toggle —
+ * no event bus, no Vue method. The class is defined in kompo-utils.scss /
+ * kompo-auth.scss and renders a spinner overlay via ::before/::after.
+ */
+export function applyLoadingPanel(panelId, on) {
+    if (!panelId) return
+    const el = document.getElementById(panelId)
+    if (!el) return
+    if (on) el.classList.add('vlPanelLoading')
+    else    el.classList.remove('vlPanelLoading')
+}
+
+/**
+ * Dispatch an axios call wrapped with a panel-loading toggle.
+ * Adds the .vlPanelLoading class before the call and removes it in `finally`,
+ * so the class always clears — on success, axios rejection, or downstream
+ * handler exceptions. Used by KompoHttpRequest to implement the PHP-side
+ * `->withLoadingIn($panelId)` semantics.
+ */
+export async function dispatchWithLoading(panelId, axiosFn, requestConfig) {
+    applyLoadingPanel(panelId, true)
+    try {
+        return await axiosFn(requestConfig)
+    } finally {
+        applyLoadingPanel(panelId, false)
+    }
+}
+
+// ==========================================
+// OPTIMISTIC CHAIN (PHP `->optimistic()` consumer)
+// ==========================================
+
+/**
+ * Mapping from action type -> inverse type for optimistic rollback.
+ * Anything not in this table is "unrollbackable" (response-dependent or
+ * has no defined inverse) and is deferred to the post-AJAX path so
+ * panel/modal/*Query etc. still fire after the request resolves.
+ */
+export const OPTIMISTIC_INVERSE = {
+    jsAddClass:    'jsRemoveClass',
+    jsRemoveClass: 'jsAddClass',
+    jsToggleClass: 'jsToggleClass',  // self-inverse
+    jsShow:        'jsHide',
+    jsHide:        'jsShow',
+    jsToggle:      'jsToggle',
+}
+
+/**
+ * Dispatch a single sub-action by looking up `action.type` in the ctx
+ * handler map. The ctx is built by the caller (typically inside
+ * KompoHttpRequest._buildSubActionContext) and contains a function per
+ * known action type.
+ *
+ * Unknown types: warn and return (no-op).
+ */
+export function runSubAction(action, ctx, response) {
+    const handler = ctx[action.type]
+    if (!handler) {
+        console.warn('[runSubAction] unknown action type: ' + action.type)
+        return
+    }
+    handler(action, response)
+}
+
+/**
+ * Run the rollbackable subset of `chain` immediately and return:
+ *   - inverseStack: actions to replay if the AJAX errors (in rollback order)
+ *   - deferred:     sub-actions that should run AFTER the AJAX (response-
+ *                   dependent: panel, modal, prependToQuery, etc.)
+ *
+ * Splitting the chain prevents silent failure when an optimistic chain
+ * mixes rollbackable js* actions with response-dependent actions.
+ */
+export function applyOptimisticChain(chain, ctx) {
+    const inverseStack = []
+    const deferred = []
+    for (const sub of chain) {
+        const inv = OPTIMISTIC_INVERSE[sub.type]
+        if (!inv) {
+            // Non-rollbackable: defer to post-AJAX (so panel/modal/etc still fire).
+            deferred.push(sub)
+            continue
+        }
+        runSubAction(sub, ctx)
+        inverseStack.unshift({ ...sub, type: inv })
+    }
+    return { inverseStack, deferred }
+}
+
 class KompoHttpRequest {
     constructor(kompoHelper, method, target, payload = {}, options = {}) {
         this.$k = kompoHelper
@@ -1183,13 +1274,68 @@ class KompoHttpRequest {
                 requestConfig.data = formData
             }
 
-            const response = await axios(requestConfig)
+            // Read the loadingPanel id set by PHP `->withLoadingIn($panelId)`
+            // (which writes `loadingPanel` onto the action's config blob) or by
+            // a JS caller passing { loadingPanel } / { config: { loadingPanel } }
+            // as the third arg to selfGet/selfPost. Wrapped via dispatchWithLoading
+            // so the .vlPanelLoading class is cleared in `finally` regardless of
+            // success, axios rejection, or _processChain exceptions.
+            const panelId = this.options?.loadingPanel
+                ?? this.options?.config?.loadingPanel
+                ?? null
 
-            // Process response chain
-            await this._processChain(response)
+            // Read the optimistic flag set by PHP `->optimistic()` (writes
+            // `optimistic: true` onto the action's config blob). Same dual-
+            // shape lookup as loadingPanel. When true, run the rollbackable
+            // js* sub-actions BEFORE the AJAX fires; defer response-dependent
+            // sub-actions (panel, modal, *Query) to the post-AJAX path so
+            // they still execute. On rejection, replay the inverse stack to
+            // roll back the pre-AJAX work.
+            const optimistic = (this.options?.optimistic
+                            ?? this.options?.config?.optimistic) === true
+            const ctx = this._buildSubActionContext(null)
+            let inverseStack = []
+            let deferred = []
 
-            // Return just the data
-            return response.data
+            if (optimistic) {
+                ({ inverseStack, deferred } = applyOptimisticChain(this._chain, ctx))
+            }
+
+            try {
+                const response = await dispatchWithLoading(panelId, axios, requestConfig)
+
+                if (!optimistic) {
+                    // Process response chain
+                    await this._processChain(response)
+                } else {
+                    // Run the deferred (response-dependent) sub-actions that
+                    // we skipped pre-AJAX, against a fresh ctx bound to the
+                    // real response. We don't call _processChain because that
+                    // would re-run the whole this._chain including js* actions
+                    // we already ran pre-AJAX.
+                    const responseCtx = this._buildSubActionContext(response)
+                    for (const sub of deferred) runSubAction(sub, responseCtx, response)
+                    if (this.options.onSuccess) {
+                        this.options.onSuccess(response.data, response)
+                    }
+                }
+
+                // Return just the data
+                return response.data
+            } catch (ajaxError) {
+                // Roll back optimistic sub-actions, if any. Each inverse is
+                // wrapped in its own try/catch so a single failing handler
+                // does not abort the rest of the rollback (and does not
+                // mask the original AJAX error, which is rethrown below).
+                for (const inv of inverseStack) {
+                    try {
+                        runSubAction(inv, ctx)
+                    } catch (rollbackErr) {
+                        console.error('[optimistic] rollback handler failed', rollbackErr)
+                    }
+                }
+                throw ajaxError
+            }
         } catch (error) {
             if (this.options.onError) {
                 this.options.onError(error)
@@ -1294,58 +1440,61 @@ class KompoHttpRequest {
         return data
     }
 
-    async _processChain(response) {
+    /**
+     * Build the per-action handler map used by runSubAction. Each entry
+     * receives (action, response) and performs the original switch-case
+     * body verbatim. Extracted so optimistic chains can dispatch the
+     * non-AJAX subset (js* handlers) before the AJAX call fires.
+     *
+     * Trade-off: when called pre-AJAX (response === null), the response-
+     * dependent handlers (modal, drawer, panel, *Query) would NPE if
+     * invoked. They aren't invoked in that path because optimistic chains
+     * only contain js* sub-actions per OPTIMISTIC_INVERSE.
+     */
+    _buildSubActionContext(response) {
         const vue = this.$k.vue
         const kompoid = vue.kompoid || vue.$_elKompoId
 
+        return {
+            modal: (a, r) => {
+                // Validate response format for modal
+                if (r.data && !r.data.vueComponent) {
+                    console.error('inModal() error: The PHP method must return a Komponent (Form, Panel, Html, etc.) with a vueComponent property. Got:', r.data)
+                    throw new Error('inModal() requires the PHP method to return a Komponent component')
+                }
+                // Pass response directly like fillModalNewAction does
+                this.$k.$kompo.vlFillModal(r, a.modalId || kompoid, {})
+            },
+            drawer: (a, r) => {
+                if (r.data && !r.data.vueComponent) {
+                    console.error('inDrawer() error: The PHP method must return a Komponent. Got:', r.data)
+                    throw new Error('inDrawer() requires the PHP method to return a Komponent component')
+                }
+                this.$k.$kompo.vlFillDrawer(r, kompoid, {})
+            },
+            panel:           (a, r) => this.$k.$kompo.vlFillPanel(a.panelId, r.data, {}),
+            prependToQuery:  (a, r) => this.$k.$kompo.vlPrependItem(a.queryId, r.data, a.itemId),
+            appendToQuery:   (a, r) => this.$k.$kompo.vlAddItem(a.queryId, r.data, 'append', a.itemId),
+            updateInQuery:   (a, r) => this.$k.$kompo.vlUpdateItem(a.queryId, a.itemId, r.data),
+            removeFromQuery: (a)    => this.$k.$kompo.vlRemoveItemById(a.queryId, a.itemId),
+            refresh:         (a)    => this.$k.refresh(a.kompoid),
+            alert:           (a)    => this.$k.alert(a.message, a.type),
+
+            // js* handlers — no response needed; act on DOM directly.
+            // These exist primarily for optimistic chains (PHP `->optimistic()`).
+            jsAddClass:    (a) => document.getElementById(a.target)?.classList.add(a.class),
+            jsRemoveClass: (a) => document.getElementById(a.target)?.classList.remove(a.class),
+            jsToggleClass: (a) => document.getElementById(a.target)?.classList.toggle(a.class),
+            jsShow:        (a) => { const e = document.getElementById(a.target); if (e) e.style.display = '' },
+            jsHide:        (a) => { const e = document.getElementById(a.target); if (e) e.style.display = 'none' },
+            jsToggle:      (a) => { const e = document.getElementById(a.target); if (e) e.style.display = e.style.display === 'none' ? '' : 'none' },
+        }
+    }
+
+    async _processChain(response) {
+        const ctx = this._buildSubActionContext(response)
         for (const action of this._chain) {
-            switch (action.type) {
-                case 'modal':
-                    // Validate response format for modal
-                    if (response.data && !response.data.vueComponent) {
-                        console.error('inModal() error: The PHP method must return a Komponent (Form, Panel, Html, etc.) with a vueComponent property. Got:', response.data)
-                        throw new Error('inModal() requires the PHP method to return a Komponent component')
-                    }
-                    // Pass response directly like fillModalNewAction does
-                    this.$k.$kompo.vlFillModal(response, action.modalId || kompoid, {})
-                    break
-
-                case 'drawer':
-                    if (response.data && !response.data.vueComponent) {
-                        console.error('inDrawer() error: The PHP method must return a Komponent. Got:', response.data)
-                        throw new Error('inDrawer() requires the PHP method to return a Komponent component')
-                    }
-                    this.$k.$kompo.vlFillDrawer(response, kompoid, {})
-                    break
-
-                case 'panel':
-                    this.$k.$kompo.vlFillPanel(action.panelId, response.data)
-                    break
-
-                case 'prependToQuery':
-                    this.$k.$kompo.vlPrependItem(action.queryId, response.data, action.itemId)
-                    break
-
-                case 'appendToQuery':
-                    this.$k.$kompo.vlAddItem(action.queryId, response.data, 'append', action.itemId)
-                    break
-
-                case 'updateInQuery':
-                    this.$k.$kompo.vlUpdateItem(action.queryId, action.itemId, response.data)
-                    break
-
-                case 'removeFromQuery':
-                    this.$k.$kompo.vlRemoveItemById(action.queryId, action.itemId)
-                    break
-
-                case 'refresh':
-                    this.$k.refresh(action.kompoid)
-                    break
-
-                case 'alert':
-                    this.$k.alert(action.message, action.type)
-                    break
-            }
+            runSubAction(action, ctx, response)
         }
 
         if (this.options.onSuccess) {

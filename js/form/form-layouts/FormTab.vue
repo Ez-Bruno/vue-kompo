@@ -7,10 +7,10 @@
         class="vlTab"
         role="tabpanel">
 
-        <component 
+        <component
             v-bind="$_attributes(tab)"
             v-for="(tab,index) in elements"
-            :key="index" />
+            :key="tab.id || tab._kid || '__idx-' + index" />
 
     </section>
 </template>

@@ -47,6 +47,7 @@ import BaseElement from '../element/mixins/BaseElement'
 import DoesAxiosRequests from '../form/mixins/DoesAxiosRequests'
 import IsKomponent from '../mixins/IsKomponent'
 import HybridFilter from './mixins/HybridFilter'
+import { replaceElementById } from '../form/helpers/replaceElementById'
 
 export default {
     mixins: [BaseElement, IsKomponent, DoesAxiosRequests, HybridFilter],
@@ -321,7 +322,7 @@ export default {
             this.headersKey += 1
         },
         browseQuery(page, additive) {
-            
+
             this.isBrowsing = true
 
             this.currentPage = page || this.currentPage
@@ -558,6 +559,10 @@ export default {
                 }
             })
 
+            this.$_vlOn('vlUpdateElements'+this.$_elKompoId, (elementUpdates, transition) => {
+                this.$_updateElementsInQuery(elementUpdates, transition)
+            })
+
             this.$_deliverKompoInfoOn()
         },
         $_destroyEvents(){
@@ -578,6 +583,7 @@ export default {
                 'vlSort'+this.$_elKompoId,
                 'vlToggle'+this.$_elKompoId,
                 'vlSetSelectionMode'+this.$_elKompoId,
+                'vlUpdateElements'+this.$_elKompoId,
                 this.$_deliverKompoInfoOff
             ])
         },
@@ -615,6 +621,38 @@ export default {
                     }
                 })
             }
+        },
+        /**
+         * Handler for vlUpdateElements events. Walks filters (all placements),
+         * headers, and each card's render tree, replacing the first element
+         * matched by id or _kid. Short-circuits on first match — assumes ids
+         * are unique within a Query; duplicate ids patch only the first hit.
+         */
+        $_updateElementsInQuery(updates, transition) {
+            const setter = (arr, i, v) => this.$set(arr, i, v)
+            Object.keys(updates).forEach(id => {
+                const newElement = updates[id]
+                if (transition && newElement.config) {
+                    newElement.config.transition = transition
+                }
+
+                for (const placement of this.filtersPlacement) {
+                    if (replaceElementById(this.filters[placement], id, newElement, setter)) return
+                }
+                if (replaceElementById(this.headers, id, newElement, setter)) return
+
+                for (let i = 0; i < this.cards.length; i++) {
+                    const card = this.cards[i]
+                    if (!card || !card.render) continue
+                    if (card.render.id === id || card.render._kid === id) {
+                        this.$set(card, 'render', newElement)
+                        return
+                    }
+                    if (Array.isArray(card.render.elements)) {
+                        if (replaceElementById(card.render.elements, id, newElement, setter)) return
+                    }
+                }
+            })
         },
         /**
          * Recursively fill form data from a card's element data object.

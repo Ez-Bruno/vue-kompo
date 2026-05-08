@@ -10,6 +10,7 @@
                 <div v-if="html" :is="{template: html}" />
                 <template v-for="(row,index) in elements">
                     <component
+                        :key="row.id || row._kid || '__idx-' + index"
                         v-bind="$_attributes(row)"
                         @closeModal="closeModal"
                         @closePanel="reset"
