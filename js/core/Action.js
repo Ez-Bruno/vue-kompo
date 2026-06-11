@@ -240,8 +240,8 @@ export default class Action {
                 ...buildJsCtx(this.vue, response),
             }
 
-            // Detect arrow functions
-            const isArrowFunction = /^\s*(\([^)]*\)|[a-zA-Z_$][a-zA-Z0-9_$]*)\s*=>/.test(jsFunction)
+            // Detect arrow functions (including async ones)
+            const isArrowFunction = /^\s*(async\s+)?(\([^)]*\)|[a-zA-Z_$][a-zA-Z0-9_$]*)\s*=>/.test(jsFunction)
 
             if (isArrowFunction) {
                 try {

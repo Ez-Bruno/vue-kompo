@@ -197,6 +197,8 @@ export default {
             // Store the channel for whisper sending
             this.$_whisperChannel = ch
             this.$_whisperEvent = whisper.event
+            this.$_whisperPayload = whisper.payload || {}
+            this.$_whisperThrottleMs = whisper.throttle || 2500
         },
 
         // --- Feature: showOnWhisper ---
@@ -209,8 +211,15 @@ export default {
             const ch = Echo.private(listen.channel)
             const hideAfter = this.$_config('hideAfter')
 
-            ch.listenForWhisper(listen.event, () => {
+            ch.listenForWhisper(listen.event, (payload) => {
                 if (listen.action === 'show') {
+                    // Fill an optional [data-whisper-name] slot with the sender's name
+                    // (sent via whisperOnInput's payload, e.g. "John is typing...")
+                    const nameEl = this.$el.querySelector('[data-whisper-name]')
+                    if (nameEl && payload && payload.name) {
+                        nameEl.textContent = payload.name + ' '
+                    }
+
                     this.$el.classList.remove('hidden')
                 }
 
@@ -245,8 +254,18 @@ export default {
         // --- Whisper trigger (called from input event) ---
         $_triggerWhisper() {
             if (this.$_whisperChannel && this.$_whisperEvent) {
+                // Throttle: input events fire per keystroke, but constant client
+                // events are wasteful and Pusher rate-limits them (~10/s). One
+                // whisper per throttle window keeps a hideAfter-based indicator
+                // alive while typing continues (default 2500ms vs hideAfter 4000ms)
+                const now = Date.now()
+                const windowMs = this.$_whisperThrottleMs || 2500
+                if (this.$_lastWhisperAt && now - this.$_lastWhisperAt < windowMs) return
+                this.$_lastWhisperAt = now
+
                 this.$_whisperChannel.whisper(this.$_whisperEvent, {
                     user: window._kompo?.user || null,
+                    ...(this.$_whisperPayload || {}),
                 })
             }
         },

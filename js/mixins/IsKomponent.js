@@ -26,7 +26,21 @@ export default {
             if(!this.$_pusherRefresh)
                 return
 
+            if (typeof Echo === 'undefined') {
+                console.warn('[kompo] pusherRefresh configured but window.Echo is not initialized', this.$_pusherRefresh)
+                return
+            }
+
             Object.keys(this.$_pusherRefresh).forEach((key) => {
+
+                const channel = Echo.private(key)
+
+                // Private-channel auth failures are otherwise completely silent
+                // (pusher-js only logs with Pusher.logToConsole=true): a 403 here
+                // means this client receives NO live updates and NO whispers
+                channel.error((e) => {
+                    console.warn('[kompo] channel subscription failed', key, e)
+                })
 
                 this.$_pusherRefresh[key].forEach((message) => {
 
@@ -34,8 +48,8 @@ export default {
                         channel: key, message: message //saving specs for stopListening later
                     })
 
-                    Echo.private(key).listen(message, (e) => {
-                        
+                    channel.listen(message, (e) => {
+
                         this.$_echoTrigger()
 
                     })

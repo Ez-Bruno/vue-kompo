@@ -229,8 +229,8 @@ export default class KompoResponseHandler {
                         ...buildJsCtx(vueInstance, runData),
                     }
 
-                    // Detect arrow functions: () =>, (x) =>, (a, b) =>, x =>
-                    const isArrowFunction = /^\s*(\([^)]*\)|[a-zA-Z_$][a-zA-Z0-9_$]*)\s*=>/.test(jsFunction)
+                    // Detect arrow functions (including async): () =>, (x) =>, async (x) =>, x =>
+                    const isArrowFunction = /^\s*(async\s+)?(\([^)]*\)|[a-zA-Z_$][a-zA-Z0-9_$]*)\s*=>/.test(jsFunction)
 
                     if (isArrowFunction) {
                         try {

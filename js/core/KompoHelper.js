@@ -224,9 +224,14 @@ export default class KompoHelper {
         const vueComponent = field.vueComponent
 
         if (vueComponent && vueComponent.$watch) {
-            const unwatch = vueComponent.$watch('value', (newVal, oldVal) => {
+            // Kompo fields hold the value at `component.value`, not at a top-level
+            // `value` property. Watching `value` was a silent no-op for most fields.
+            // `deep:true` is required because Select-style fields hold arrays of
+            // option objects ([{value,label}]) and mutate them in place.
+            const watchPath = vueComponent.component ? 'component.value' : 'value'
+            const unwatch = vueComponent.$watch(watchPath, (newVal, oldVal) => {
                 callback(newVal, oldVal, field)
-            })
+            }, { deep: true })
             this._watchers.push(unwatch)
             return unwatch
         }
@@ -359,19 +364,25 @@ class KompoFieldHelper {
     get vueComponent() {
         if (this._vueComponent) return this._vueComponent
 
-        // Try to find Vue component by various methods with parents included by max depth 5
-        // We normally are able at the first but for example checkboxes have the id in a child of the component
-        // So we need to be able to go up a few levels to find the component. We limit to 5 to avoid infinite loops in case of misconfiguration.
+        // Walk up the DOM to find the Kompo Vue instance.
+        // Prefer the ancestor that exposes `.component` (the Kompo field wrapper that
+        // stores `component.value` — what jsComputed and reactive features watch).
+        // Falls back to the first __vue__ encountered for non-Kompo elements.
         let el = this.element
+        let firstFound = null
         for (let depth = 0; depth < 5; depth++) {
             if (el && el.__vue__) {
-                this._vueComponent = el.__vue__
-                break
+                if (!firstFound) firstFound = el.__vue__
+                if (el.__vue__.component) {
+                    this._vueComponent = el.__vue__
+                    return this._vueComponent
+                }
             }
             el = el ? el.parentElement : null
             if (!el) break
         }
 
+        this._vueComponent = firstFound
         return this._vueComponent
     }
 

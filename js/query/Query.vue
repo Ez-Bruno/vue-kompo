@@ -1,4 +1,4 @@
-<template>
+﻿<template>
     <div v-bind="queryAttributes" :class="[queryClass, $_filterLoadingClass]">
 
         <component v-bind="filtersAttributes('Left')" />
@@ -286,8 +286,16 @@ export default {
         },
         $_echoTrigger(){
 
-            if(this.currentPage != 1) //a current limitation.. TODO: handle when on other pages
-                return
+            if(this.currentPage != 1) {
+                // Chat-style queries (scroll-up pagination): new items always land on
+                // page 1, so re-browse it — otherwise a window scrolled into history
+                // silently stops live-updating until a manual reload
+                if (this.isScrollPagination && this.topPagination) {
+                    this.currentPage = 1
+                    this.browseQuery(1)
+                }
+                return //other paginated queries: current limitation, handle later
+            }
 
             this.browseQuery()
         },
@@ -489,13 +497,11 @@ export default {
                 } else {
                     this.cards.push(card)
                 }
-                this.cardsKey += 1
             })
 
             this.$_vlOn('vlPrependItem'+this.$_elKompoId, (item, itemId) => {
                 const card = this.$_wrapAsCard(item, itemId)
                 this.cards.unshift(card)
-                this.cardsKey += 1
             })
 
             this.$_vlOn('vlUpdateItem'+this.$_elKompoId, (itemId, item) => {
@@ -505,7 +511,6 @@ export default {
                 if (index !== -1) {
                     const card = this.$_wrapAsCard(item, itemId)
                     Vue.set(this.cards, index, card)
-                    this.cardsKey += 1
                 }
             })
 
@@ -515,7 +520,6 @@ export default {
                 )
                 if (index !== -1) {
                     this.cards.splice(index, 1)
-                    this.cardsKey += 1
                 }
             })
 
@@ -625,7 +629,7 @@ export default {
         /**
          * Handler for vlUpdateElements events. Walks filters (all placements),
          * headers, and each card's render tree, replacing the first element
-         * matched by id or _kid. Short-circuits on first match — assumes ids
+         * matched by id or _kid. Short-circuits on first match â€” assumes ids
          * are unique within a Query; duplicate ids patch only the first hit.
          */
         $_updateElementsInQuery(updates, transition) {
