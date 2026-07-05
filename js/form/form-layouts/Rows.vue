@@ -8,7 +8,8 @@
             <component
                 :key="row.id || row._kid || '__idx-' + index"
                 v-bind="$_attributes(row)"
-                @touchedForm="touchedForm" />
+                @touchedForm="touchedForm"
+                @deleted="$emit('deleted')" />
         </template>
     </component>
 </template>

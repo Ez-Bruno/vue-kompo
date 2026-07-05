@@ -43,6 +43,11 @@ export default {
     },
     methods: {
         deleted(){
+            // Notify the origin DeleteLink (outside this modal) that the delete
+            // succeeded, so a containing MultiForm can splice the row in place.
+            if (this.component.onDeleted) {
+                this.component.onDeleted()
+            }
             this.closeModal()
         },
         closeModal(){

@@ -41,6 +41,11 @@ export default {
                 data: Object.assign({}, this.vkompo, {
                     vueComponent: 'DeleteLinkModalContent',
                     itemIndex: this.index,
+                    // The real delete runs on the confirm button inside the modal, so its
+                    // emitDirect('deleted') is trapped there. Hand a callback to the modal
+                    // so the origin link (still mounted in the list/MultiForm row) re-emits
+                    // 'deleted' and the row is spliced in place — no whole-form refresh.
+                    onDeleted: () => this.$emit('deleted'),
                     class: '',
                     style: '',
                 })
