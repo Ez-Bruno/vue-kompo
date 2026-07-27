@@ -2,11 +2,38 @@ import Alert from './Alert'
 import KompoAxiosCtor from './KompoAxios'
 import { buildJsCtx } from './KompoHelper'
 
+// Last resort only: PHP ships the absolute dispatch route with the response
+// (KompoResponse::refresh). Same constant as KompoHelper._buildUrl().
+const KOMPO_DISPATCH_ROUTE = '/_kompo'
+
 /**
  * Global handler for Kompo dynamic responses
  * This can be used by any component to handle dynamic responses
  */
 export default class KompoResponseHandler {
+
+    /**
+     * Finds a Kompo dispatch route among the routes a source has in scope.
+     * Only '_kompo' is accepted: X-Kompo-Action batches are handled by the
+     * Dispatcher alone, so an action's own route (->post('app.route')) would
+     * re-POST the payload to the application endpoint instead.
+     */
+    static findKompoRoute(source) {
+        if (!source) {
+            return null
+        }
+
+        const candidates = [
+            source.$_kAxios && source.$_kAxios.$_kompoRoute,
+            source.$_kAxios && source.$_kAxios.$_route,
+            source.$_config && source.$_config('kompoRoute'),
+            source.$_config && source.$_config('route'),
+        ]
+
+        return candidates.find(candidate =>
+            _.isString(candidate) && candidate.split('?')[0].replace(/\/+$/, '').endsWith('/_kompo')
+        ) || null
+    }
     /**
      * Handle a dynamic Kompo response
      * @param {Object} responseData - The response data containing kompoResponseType
@@ -94,6 +121,7 @@ export default class KompoResponseHandler {
                     })()
 
                 if (!ids.length) {
+                    console.warn('Kompo: refresh response has no target — pass a kompoid to kompoRefresh()')
                     break
                 }
 
@@ -127,39 +155,40 @@ export default class KompoResponseHandler {
                 })
 
                 if (!specifications.length) {
+                    console.warn('Kompo: refresh response skipped, target Komponent(s) not live', ids)
                     break
                 }
 
-                // Resolve the kompo route from any available source. The action that just
-                // received this response was POSTed there, but for action types without a
-                // 'route' config (e.g. submit-form), fall back to the vue's kompoRoute config
-                // or hop through any live Komponent that exposes it.
-                const route =
-                    (actionContext && actionContext.$_kAxios && (actionContext.$_kAxios.$_route || actionContext.$_kAxios.$_kompoRoute)) ||
-                    (actionContext && actionContext.$_config && (actionContext.$_config('route') || actionContext.$_config('kompoRoute'))) ||
-                    (vueInstance.$_kAxios && (vueInstance.$_kAxios.$_route || vueInstance.$_kAxios.$_kompoRoute)) ||
-                    (vueInstance.$_config && (vueInstance.$_config('kompoRoute') || vueInstance.$_config('route'))) ||
-                    null
-
-                if (!route) {
-                    console.warn('Kompo: refresh response skipped, no kompo route available', {
-                        askerId,
-                        hasActionContext: !!actionContext,
-                        actionConfigRoute: actionContext && actionContext.actionConfig && actionContext.actionConfig.route,
-                        actionKAxiosRoute: actionContext && actionContext.$_kAxios && actionContext.$_kAxios.$_route,
-                        actionKAxiosKompoRoute: actionContext && actionContext.$_kAxios && actionContext.$_kAxios.$_kompoRoute,
-                        vueConfigKompoRoute: vueInstance.$_config && vueInstance.$_config('kompoRoute'),
-                        vueConfigRoute: vueInstance.$_config && vueInstance.$_config('route'),
-                    })
-                    break
-                }
+                // Unlike ->refresh(), which carries RouteFinder::getKompoRoute() in its action
+                // config, a response has no action to read from. PHP now ships the dispatch
+                // route in the body; the rest only covers an older backend.
+                const route = responseData.route
+                    || KompoResponseHandler.findKompoRoute(actionContext)
+                    || KompoResponseHandler.findKompoRoute(vueInstance)
+                    || KOMPO_DISPATCH_ROUTE
 
                 const kAxios = (actionContext && actionContext.$_kAxios) || vueInstance.$_kAxios || new KompoAxiosCtor(vueInstance)
 
+                vueInstance.$_state({ loading: true })
+
                 kAxios.$_refreshMany(route, specifications).then(r => {
+
+                    vueInstance.$_state({ loading: false })
+
                     Object.keys(r.data).forEach(kompoid => {
                         vueInstance.$kompo.vlRefreshKomponent(kompoid, r.data[kompoid])
                     })
+
+                }).catch(e => {
+
+                    vueInstance.$_state({ loading: false })
+
+                    if (actionContext) {
+                        actionContext.handleErrorInteraction(e)
+                    } else {
+                        kAxios.$_handleAjaxError(e)
+                    }
+
                 })
                 break
             }
