@@ -96,8 +96,8 @@ export default class KompoAxios{
             }
         }
 
-        return this.$_axios({
-            url: this.$_kompoRoute, 
+        return this.$_axiosFollowingRedirect({
+            url: this.$_kompoRoute,
             method: 'POST',
             data: formData,
             headers: {
@@ -109,7 +109,7 @@ export default class KompoAxios{
         })
     }
     $_browseMany(url, specifications){
-        return this.$_axios({
+        return this.$_axiosFollowingRedirect({
             url: url, 
             method: 'POST',
             data: specifications,
@@ -165,7 +165,7 @@ export default class KompoAxios{
         })
     }
     $_refreshMany(url, specifications){
-        return this.$_axios({
+        return this.$_axiosFollowingRedirect({
             url: url, 
             method: 'POST',
             data: specifications,
@@ -210,12 +210,23 @@ export default class KompoAxios{
     }
     $_axiosWithErrorHandling(axiosRequest){
 
-        return this.$_axios(axiosRequest)
+        return this.$_axiosFollowingRedirect(axiosRequest)
                    .catch(e => {
 
-                        this.$_handleAjaxError(e) 
+                        this.$_handleAjaxError(e)
 
                     })
+    }
+    // Only actions (Action.js) and submits (FormInner) read kompoResponseType. A redirect
+    // coming back on a browse/refresh/load path (auth lapsed) must navigate, not render as data.
+    $_axiosFollowingRedirect(axiosRequest){
+        return this.$_axios(axiosRequest).then(r => {
+            if (r.data && r.data.kompoResponseType === 'redirect' && r.data.url) {
+                window.location.href = r.data.url
+                return new Promise(() => {}) // leaving the page; never hand the redirect to the caller
+            }
+            return r
+        })
     }
     $_axios(axiosRequest){
         return axios(axiosRequest)
